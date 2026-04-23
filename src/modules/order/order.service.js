@@ -1,11 +1,39 @@
 const { OrderStatus, AllowedTransition } = require('./order.constants');
+const InventoryService = require('../inventory/inventory.service')
 
 // Order table from Datebase
-const mockOrderDB = new Map([
-  ['ORD_1001', { id: 'ORD_1001', amount: 5000, status: OrderStatus.PENDING }],
-]);
+const mockOrderDB = new Map();
 
 class OrderService {
+
+  /**
+   * Create Order with Inventory Defence
+   */
+  static async createOrder (orderId, productId, quantity, amount) {
+    console.log(`---Starting Order Creation for ${orderId} ---`)
+
+    // 1. Apply pre-deduct stock from Inventory Service
+    const isReserved = await InventoryService.reserveStock(productId, quantity)
+
+    if (!isReserved) {
+      throw new Error(`Order ${orderId} failed: Insufficient stock for ${productId}`)
+    }
+
+    // 2. creating PENDING state order, only when stock locked successfully
+    const newOrder = {
+      id: orderId,
+      productId,
+      quantity,
+      amount,
+      status: OrderStatus.PENDING
+    }
+    mockOrderDB.set(orderId, newOrder)
+
+    console.log(`[Order Created] Order ${orderId} is now PENDING`)
+    return newOrder
+
+  }
+
   /**
    *
    * @param {string} orderId
@@ -24,7 +52,7 @@ class OrderService {
 
     const currentStatus = order.status;
 
-    // Defence: Intercept illeagl status transition
+    // 1. Defence: Intercept illeagl status transition
     const validNextStates = AllowedTransition[currentStatus] || [];
     if (!validNextStates.includes(targetStatus)) {
       throw new Error(
@@ -32,7 +60,16 @@ class OrderService {
       );
     }
 
-    // Database transaction changed
+    // 2. Trigger Inventory module based on order status
+    if ( targetStatus === OrderStatus.PAID) {
+      // Payment Success: Deduct physical stock
+      await InventoryService.confirmStock(order.productId, order.quantity)
+    } else if (targetStatus === OrderStatus.CANCELLED) {
+      // Order Cancelled: Release Locked Stock
+      await InventoryService.releaseStock(order.productId, order.quantity)
+    }
+
+    // 3. Order Status Update
     order.status = targetStatus;
     mockOrderDB.set(orderId, order);
 

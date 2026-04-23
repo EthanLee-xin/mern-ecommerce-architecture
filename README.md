@@ -15,6 +15,12 @@ When integrating with gateways like Stripe, network retries can cause double-cha
 - **`/payment`**: Manages external gateway interactions and idempotency.
 - They communicate purely through well-defined Service methods, laying the groundwork for a future microservices split.
 
+### 4. High-Concurrency Inventory Reservation (Lock-then-Buy)
+To prevent catastrophic overselling during traffic spikes (e.g., Flash Sales), the system implements an Inventory Reservation pattern. 
+- **On Order Creation:** Stock is temporarily locked in a fast-access cache (simulated). 
+- **On Payment Success:** The physical database inventory is permanently deducted.
+- **On Payment Failure/Timeout:** The locked stock is released back to the pool.
+
 ## Tech Stack
 - Node.js & Express
 - Event-Driven & State Machine Patterns
